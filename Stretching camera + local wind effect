@@ -1,0 +1,107 @@
+
+local rs = game:GetService("RunService")
+local plrs = game:GetService("Players")
+
+local plr = plrs.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local baseFov = 70
+local maxIncrease = 30
+local maxVel = 80
+local smooth = 0.1
+local speedThreshold = 50
+
+local curFov = baseFov
+local lastPos = nil
+local streaks = {}
+local streakFolder = Instance.new("Folder")
+streakFolder.Name = "SpeedStreaks"
+streakFolder.Parent = cam
+
+local function curve(t)
+	return 1 - (1 - t) * (1 - t)
+end
+
+local function createStreak()
+	local streak = Instance.new("Part")
+	streak.Size = Vector3.new(0.1, 0.1, 8)
+	streak.Anchored = true
+	streak.CanCollide = false
+	streak.Material = Enum.Material.Neon
+	streak.Color = Color3.fromRGB(200, 220, 255)
+	streak.Transparency = 0.3
+	streak.CastShadow = false
+	streak.Parent = streakFolder
+	
+	return streak
+end
+
+local function updateStreaks(speed, direction)
+	local intensity = math.clamp((speed - speedThreshold) / (maxVel - speedThreshold), 0, 1)
+	
+	if intensity > 0.1 then
+		if #streaks < 30 then
+			table.insert(streaks, {
+				part = createStreak(),
+				life = 0
+			})
+		end
+		
+		for i = #streaks, 1, -1 do
+			local s = streaks[i]
+			s.life = s.life + 0.016
+			
+			if s.life > 0.8 then
+				s.part:Destroy()
+				table.remove(streaks, i)
+			else
+				local offset = Vector3.new(
+					math.random(-20, 20),
+					math.random(-15, 15),
+					math.random(-20, 20)
+				)
+				
+				local basePos = cam.CFrame.Position + direction * (10 + s.life * 40)
+				s.part.CFrame = CFrame.new(basePos + offset, basePos + offset + direction * 10)
+				s.part.Transparency = 0.3 + (s.life * 0.7)
+			end
+		end
+	else
+		for i = #streaks, 1, -1 do
+			streaks[i].part:Destroy()
+			table.remove(streaks, i)
+		end
+	end
+end
+
+rs.RenderStepped:Connect(function(dt)
+	local char = plr.Character
+	if not char then return end
+	
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	local currentPos = hrp.Position
+	
+	if lastPos then
+		local displacement = currentPos - lastPos
+		local distance = displacement.Magnitude
+		local speed = distance / dt
+		
+		local t = math.min(speed / maxVel, 1)
+		local curved = curve(t)
+		local increase = curved * maxIncrease
+		
+		local targetFov = baseFov + increase
+		curFov = curFov + (targetFov - curFov) * smooth
+		
+		cam.FieldOfView = curFov
+		
+		if distance > 0 then
+			local direction = displacement.Unit
+			updateStreaks(speed, direction)
+		end
+	end
+	
+	lastPos = currentPos
+end)
