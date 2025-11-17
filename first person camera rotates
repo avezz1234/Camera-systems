@@ -1,0 +1,143 @@
+---THIS IS THE LOCAL SCRIPT SEGMENT. THIS IS A LOCAL SCRIPT INSIDE STARTERPLAYERSCRIPTS.---
+
+
+local rs = game:GetService("RunService")
+local plrs = game:GetService("Players")
+local uis = game:GetService("UserInputService")
+local repStorage = game:GetService("ReplicatedStorage")
+
+local plr = plrs.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local remote = nil
+repeat
+	remote = repStorage:FindFirstChild("HeadRotation")
+	if not remote then
+		task.wait(0.1)
+	end
+until remote
+
+print("Found HeadRotation remote on client")
+
+local maxPitch = 85
+local minPitch = -85
+local maxYaw = 75
+local minYaw = -75
+local bodyTurnThreshold = 60
+local turnSensitivity = 0.15
+
+local currentYaw = 0
+local currentPitch = 0
+local isTurning = false
+local lastBodyYaw = 0
+local updateTimer = 0
+
+uis.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		isTurning = true
+	end
+end)
+
+uis.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		isTurning = false
+	end
+end)
+
+local function setupCharacter(char)
+	for _, part in pairs(char:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			part.LocalTransparencyModifier = 0
+		end
+	end
+	
+	local head = char:WaitForChild("Head")
+	local hrp = char:WaitForChild("HumanoidRootPart")
+	local hum = char:WaitForChild("Humanoid")
+	
+	plr.CameraMaxZoomDistance = 0.5
+	plr.CameraMinZoomDistance = 0.5
+	plr.CameraMode = Enum.CameraMode.LockFirstPerson
+	
+	cam.CameraSubject = head
+end
+
+if plr.Character then
+	setupCharacter(plr.Character)
+end
+
+plr.CharacterAdded:Connect(setupCharacter)
+
+rs.RenderStepped:Connect(function()
+	local char = plr.Character
+	if not char then return end
+	
+	local head = char:FindFirstChild("Head")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChild("Humanoid")
+	if not head or not hrp or not hum then return end
+	
+	hum.AutoRotate = not isTurning
+	
+	local _, currentBodyYaw, _ = hrp.CFrame:ToOrientation()
+	local bodyYawDelta = math.deg(currentBodyYaw - lastBodyYaw)
+	
+	if math.abs(bodyYawDelta) > 0.1 then
+		currentYaw = currentYaw
+	end
+	
+	lastBodyYaw = currentBodyYaw
+	
+	local delta = uis:GetMouseDelta()
+	
+	if isTurning then
+		local turnAmount = -delta.X * turnSensitivity
+		hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(turnAmount), 0)
+		currentPitch = math.clamp(currentPitch - delta.Y * 0.2, minPitch, maxPitch)
+	else
+		local yawChange = -delta.X * 0.2
+		local newYaw = currentYaw + yawChange
+		
+		newYaw = math.clamp(newYaw, minYaw, maxYaw)
+		currentYaw = newYaw
+		
+		currentPitch = math.clamp(currentPitch - delta.Y * 0.2, minPitch, maxPitch)
+	end
+	
+	local neckC0 = CFrame.new(0, 1, 0)
+	local neck = nil
+	local waist = nil
+	
+	for _, desc in pairs(char:GetDescendants()) do
+		if desc:IsA("Motor6D") then
+			if desc.Name == "Neck" then
+				neck = desc
+			elseif desc.Name == "Waist" then
+				waist = desc
+			end
+		end
+	end
+	
+	if neck then
+		neck.C0 = neckC0 * CFrame.Angles(math.rad(currentPitch), math.rad(currentYaw), 0)
+	end
+	
+	if waist then
+		waist.C0 = waist.C0:Lerp(CFrame.new(0, 0.2, 0) * CFrame.Angles(math.rad(currentPitch * 0.3), 0, 0), 0.5)
+	end
+	
+	local bodyForward = hrp.CFrame.LookVector
+	local bodyRight = hrp.CFrame.RightVector
+	local headRotation = CFrame.fromMatrix(head.Position, bodyRight, Vector3.new(0, 1, 0)) * CFrame.Angles(math.rad(currentPitch), math.rad(currentYaw), 0)
+	
+	cam.CFrame = headRotation * CFrame.new(0, 0.15, 0.5)
+	
+	updateTimer = updateTimer + 1
+	if updateTimer >= 3 then
+		if remote then
+			remote:FireServer(currentPitch, currentYaw)
+			print("Sent rotation to server:", currentPitch, currentYaw)
+		end
+		updateTimer = 0
+	end
+end)
