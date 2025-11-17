@@ -141,3 +141,99 @@ rs.RenderStepped:Connect(function()
 		updateTimer = 0
 	end
 end)
+
+--
+
+--
+
+
+--
+
+
+--
+
+
+
+--
+
+--
+
+
+--
+
+--
+--
+
+
+
+
+
+
+--
+
+
+
+
+
+
+
+--
+
+
+
+--
+
+-----THIS IS THE SERVERSCRIPTSERVICE SIDE. DONT PUT THIS LOCALLY, BECAUSE LIKE OBVIOUSLY IT WONT WORK. USE YOUR BRAIN---------
+
+
+
+
+
+-- Put this in ServerScriptService
+
+local rs = game:GetService("RunService")
+local repStorage = game:GetService("ReplicatedStorage")
+
+local remote = Instance.new("RemoteEvent")
+remote.Name = "HeadRotation"
+remote.Parent = repStorage
+
+print("HeadRotation remote created")
+
+local playerRotations = {}
+
+remote.OnServerEvent:Connect(function(plr, pitch, yaw)
+	if typeof(pitch) ~= "number" or typeof(yaw) ~= "number" then return end
+
+	pitch = math.clamp(pitch, -85, 85)
+	yaw = math.clamp(yaw, -75, 75)
+
+	print("Received rotation from", plr.Name, "Pitch:", pitch, "Yaw:", yaw)
+
+	playerRotations[plr.UserId] = {pitch = pitch, yaw = yaw, player = plr}
+end)
+
+rs.Heartbeat:Connect(function()
+	for userId, data in pairs(playerRotations) do
+		local plr = data.player
+		if plr and plr.Character then
+			local char = plr.Character
+			local head = char:FindFirstChild("Head")
+
+			if head then
+				for _, desc in pairs(char:GetDescendants()) do
+					if desc:IsA("Motor6D") and desc.Name == "Neck" then
+						local neckC0 = CFrame.new(0, 1, 0)
+						desc.C0 = neckC0 * CFrame.Angles(math.rad(data.pitch), math.rad(data.yaw), 0)
+						print("Applied neck rotation to", plr.Name)
+					elseif desc:IsA("Motor6D") and desc.Name == "Waist" then
+						local waistC0 = CFrame.new(0, 0.2, 0)
+						desc.C0 = waistC0 * CFrame.Angles(math.rad(data.pitch * 0.3), 0, 0)
+					end
+				end
+			end
+		else
+			playerRotations[userId] = nil
+		end
+	end
+end)
